@@ -31,10 +31,27 @@ Hooks.once("setup", () => {
 
 Hooks.on("canvasReady", () => {
   const activeLayer = canvas.activeLayer;
-  const layerName = activeLayer?.constructor?.name;
-  const layerProto = activeLayer ? Object.getPrototypeOf(activeLayer) : null;
-  const ownsClick = layerProto ? Object.prototype.hasOwnProperty.call(layerProto, "_onClickLeft") : false;
-  console.log(`${MODULE_ID} | canvasReady, activeLayer=${layerName}, layerOwnsOnClickLeft=${ownsClick}`);
+  if (!activeLayer) {
+    console.log(`${MODULE_ID} | canvasReady, no activeLayer`);
+    return;
+  }
+
+  const owners = [];
+  let proto = Object.getPrototypeOf(activeLayer);
+  while (proto && proto !== Object.prototype) {
+    if (Object.prototype.hasOwnProperty.call(proto, "_onClickLeft")) {
+      owners.push(proto.constructor?.name ?? "(anon)");
+    }
+    proto = Object.getPrototypeOf(proto);
+  }
+  console.log(`${MODULE_ID} | canvasReady, activeLayer=${activeLayer.constructor.name}, _onClickLeft owners (most-specific first):`, owners);
+
+  const mim = activeLayer.mouseInteractionManager;
+  if (mim) {
+    console.log(`${MODULE_ID} | active layer MIM callbacks:`, Object.keys(mim.callbacks ?? {}));
+  } else {
+    console.log(`${MODULE_ID} | active layer has no mouseInteractionManager`);
+  }
 });
 
 function onLayerClickLeft(wrapped, event) {
