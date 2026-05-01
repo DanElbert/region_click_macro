@@ -2,7 +2,7 @@
   "id": "region-click-macro",
   "title": "Region Click Macro",
   "description": "Adds an 'Execute Macro on Click' region behavior that runs a macro when a user left-clicks a region.",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "compatibility": {
     "minimum": "14",
     "verified": "14"
