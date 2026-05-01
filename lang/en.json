@@ -1,0 +1,26 @@
+{
+  "TYPES.RegionBehavior.region-click-macro.clickMacro": "Execute Macro on Click",
+  "REGION_CLICK_MACRO": {
+    "BEHAVIOR": {
+      "ClickMacro": {
+        "FIELDS": {
+          "uuid": {
+            "label": "Macro",
+            "hint": "The macro to execute when this region is left-clicked."
+          },
+          "triggerPermission": {
+            "label": "Trigger Permission",
+            "hint": "Which users' clicks fire the macro."
+          }
+        }
+      }
+    },
+    "PERMISSION": {
+      "ALL": "All Users",
+      "PLAYER": "Players & Above",
+      "TRUSTED": "Trusted Players & Above",
+      "ASSISTANT": "Assistant GMs & Above",
+      "GAMEMASTER": "Gamemasters Only"
+    }
+  }
+}
