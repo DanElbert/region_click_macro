@@ -13,6 +13,7 @@ https://raw.githubusercontent.com/DanElbert/region_click_macro/main/module.json
 ## Requirements
 
 - Foundry VTT v14
+- [libWrapper](https://foundryvtt.com/packages/lib-wrapper) (required dependency)
 
 ## Usage
 

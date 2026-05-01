@@ -10,26 +10,39 @@ Hooks.once("init", () => {
   CONFIG.RegionBehavior.typeIcons[FULL_TYPE] = "fa-solid fa-arrow-pointer";
 });
 
-Hooks.on("canvasReady", () => {
-  const stage = canvas?.stage;
-  if (!stage) return;
-  stage.off("pointertap", onCanvasPointerTap);
-  stage.on("pointertap", onCanvasPointerTap);
+Hooks.once("setup", () => {
+  if (typeof libWrapper === "undefined") {
+    ui.notifications?.error("Region Click Macro requires the libWrapper module.");
+    return;
+  }
+  libWrapper.register(
+    MODULE_ID,
+    "foundry.canvas.layers.InteractionLayer.prototype._onClickLeft",
+    onLayerClickLeft,
+    "WRAPPER"
+  );
 });
 
-function onCanvasPointerTap(event) {
-  if (event.button !== undefined && event.button !== 0) return;
-  if (canvas.activeLayer === canvas.regions) return;
-
-  const local = event.getLocalPosition(canvas.stage);
-  const point = { x: local.x, y: local.y };
-
-  void dispatchRegionClicks(point, event);
+function onLayerClickLeft(wrapped, event) {
+  const result = wrapped(event);
+  try {
+    if (this !== canvas.regions) {
+      void dispatchRegionClicks(event);
+    }
+  } catch (err) {
+    console.error(`${MODULE_ID} | Error dispatching region click`, err);
+  }
+  return result;
 }
 
-async function dispatchRegionClicks(point, originalEvent) {
+async function dispatchRegionClicks(event) {
   const scene = canvas?.scene;
   if (!scene) return;
+
+  const origin = event?.interactionData?.origin
+    ?? event?.getLocalPosition?.(canvas.stage);
+  if (!origin || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) return;
+  const point = { x: origin.x, y: origin.y };
 
   const targets = [];
   for (const regionDoc of scene.regions) {
@@ -41,7 +54,7 @@ async function dispatchRegionClicks(point, originalEvent) {
 
   const regionEvent = {
     name: CLICK_EVENT_NAME,
-    data: { point, user: game.user, originalEvent },
+    data: { point, user: game.user, originalEvent: event },
     user: game.user
   };
 
@@ -63,11 +76,21 @@ function regionHasClickMacroBehavior(regionDoc) {
 
 function regionContainsPoint(regionDoc, point) {
   const placeable = regionDoc.object;
-  if (placeable?.shape?.contains) {
-    return placeable.shape.contains(point.x, point.y);
+  if (placeable && typeof placeable.testPoint === "function") {
+    try { return !!placeable.testPoint(point); } catch (_) {}
   }
   if (typeof regionDoc.testPoint === "function") {
-    return regionDoc.testPoint({ x: point.x, y: point.y, elevation: 0 });
+    try { return !!regionDoc.testPoint(point); } catch (_) {}
+    try { return !!regionDoc.testPoint({ x: point.x, y: point.y, elevation: 0 }); } catch (_) {}
+  }
+  if (placeable?.polygons?.length) {
+    for (const poly of placeable.polygons) {
+      if (poly.contains?.(point.x, point.y)) return true;
+    }
+    return false;
+  }
+  if (placeable?.shape?.contains) {
+    return !!placeable.shape.contains(point.x, point.y);
   }
   return false;
 }
