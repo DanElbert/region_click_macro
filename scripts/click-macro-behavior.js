@@ -1,9 +1,34 @@
+import { log } from "./log.js";
+
 const fields = foundry.data.fields;
 
 export const CLICK_EVENT_NAME = "regionClickLeft";
 
+async function handleClickEvent(event) {
+  if (!this.uuid) return;
+
+  const user = event.data?.user ?? game.user;
+  if (!this.userCanTrigger(user)) return;
+
+  const macro = await fromUuid(this.uuid);
+  if (!macro) {
+    log.warn(`macro ${this.uuid} not found for behavior ${this.parent?.uuid}`);
+    return;
+  }
+
+  await macro.execute({
+    event,
+    region: this.parent?.region,
+    behavior: this.parent
+  });
+}
+
 export class ClickMacroBehaviorType extends foundry.data.regionBehaviors.RegionBehaviorType {
   static LOCALIZATION_PREFIXES = ["REGION_CLICK_MACRO.BEHAVIOR.ClickMacro"];
+
+  static events = {
+    [CLICK_EVENT_NAME]: handleClickEvent
+  };
 
   static defineSchema() {
     return {
@@ -25,34 +50,8 @@ export class ClickMacroBehaviorType extends foundry.data.regionBehaviors.RegionB
 
   userCanTrigger(user) {
     if (!user) return false;
-    const ROLES = CONST.USER_ROLES;
-    switch (this.triggerPermission) {
-      case "ALL": return true;
-      case "PLAYER": return user.role >= ROLES.PLAYER;
-      case "TRUSTED": return user.role >= ROLES.TRUSTED;
-      case "ASSISTANT": return user.role >= ROLES.ASSISTANT;
-      case "GAMEMASTER": return user.role >= ROLES.GAMEMASTER;
-      default: return false;
-    }
-  }
-
-  async _handleRegionEvent(event) {
-    if (event?.name !== CLICK_EVENT_NAME) return;
-    if (!this.uuid) return;
-
-    const user = event.data?.user ?? game.user;
-    if (!this.userCanTrigger(user)) return;
-
-    const macro = await fromUuid(this.uuid);
-    if (!macro) {
-      console.warn(`region-click-macro | Macro ${this.uuid} not found for behavior ${this.parent?.uuid}`);
-      return;
-    }
-
-    await macro.execute({
-      event,
-      region: this.parent?.region,
-      behavior: this.parent
-    });
+    if (this.triggerPermission === "ALL") return true;
+    const minRole = CONST.USER_ROLES[this.triggerPermission];
+    return minRole !== undefined && user.role >= minRole;
   }
 }

@@ -1,93 +1,42 @@
 import { ClickMacroBehaviorType, CLICK_EVENT_NAME } from "./click-macro-behavior.js";
+import { log } from "./log.js";
 
 const MODULE_ID = "region-click-macro";
 const SUBTYPE = "clickMacro";
 const FULL_TYPE = `${MODULE_ID}.${SUBTYPE}`;
 
-console.log(`${MODULE_ID} | script loaded`);
-
 Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | init`);
   CONFIG.RegionBehavior.dataModels[FULL_TYPE] = ClickMacroBehaviorType;
   CONFIG.RegionBehavior.typeIcons ??= {};
   CONFIG.RegionBehavior.typeIcons[FULL_TYPE] = "fa-solid fa-arrow-pointer";
 });
 
-Hooks.once("setup", () => {
-  console.log(`${MODULE_ID} | setup`);
-  if (typeof libWrapper === "undefined") {
-    console.error(`${MODULE_ID} | libWrapper is not defined`);
-    ui.notifications?.error("Region Click Macro requires the libWrapper module.");
-    return;
-  }
-  libWrapper.register(
-    MODULE_ID,
-    "foundry.canvas.layers.InteractionLayer.prototype._onClickLeft",
-    onLayerClickLeft,
-    "WRAPPER"
-  );
-  console.log(`${MODULE_ID} | libWrapper registered InteractionLayer._onClickLeft`);
-});
-
 Hooks.on("canvasReady", () => {
-  const activeLayer = canvas.activeLayer;
-  if (!activeLayer) {
-    console.log(`${MODULE_ID} | canvasReady, no activeLayer`);
+  const callbacks = canvas.mouseInteractionManager?.callbacks;
+  if (!callbacks?.clickLeft) {
+    log.warn("canvas MouseInteractionManager has no clickLeft callback; clicks will not fire");
     return;
   }
+  if (callbacks._regionClickWrapped) return;
 
-  const owners = [];
-  let proto = Object.getPrototypeOf(activeLayer);
-  while (proto && proto !== Object.prototype) {
-    if (Object.prototype.hasOwnProperty.call(proto, "_onClickLeft")) {
-      owners.push(proto.constructor?.name ?? "(anon)");
+  const original = callbacks.clickLeft;
+  callbacks.clickLeft = function(event) {
+    const result = original.apply(this, arguments);
+    if (canvas.activeLayer !== canvas.regions) {
+      dispatchRegionClicks(event).catch(err => log.error("dispatch failed", err));
     }
-    proto = Object.getPrototypeOf(proto);
-  }
-  console.log(`${MODULE_ID} | canvasReady, activeLayer=${activeLayer.constructor.name}, _onClickLeft owners (most-specific first):`, owners);
-
-  const mim = activeLayer.mouseInteractionManager;
-  if (mim) {
-    console.log(`${MODULE_ID} | active layer MIM callbacks:`, Object.keys(mim.callbacks ?? {}));
-  } else {
-    console.log(`${MODULE_ID} | active layer has no mouseInteractionManager`);
-  }
+    return result;
+  };
+  callbacks._regionClickWrapped = true;
 });
-
-function onLayerClickLeft(wrapped, event) {
-  console.log(`${MODULE_ID} | _onClickLeft fired on ${this?.constructor?.name}`);
-  const result = wrapped(event);
-  try {
-    if (this !== canvas.regions) {
-      void dispatchRegionClicks(event);
-    }
-  } catch (err) {
-    console.error(`${MODULE_ID} | Error dispatching region click`, err);
-  }
-  return result;
-}
 
 async function dispatchRegionClicks(event) {
   const scene = canvas?.scene;
   if (!scene) return;
 
-  const origin = event?.interactionData?.origin
-    ?? event?.getLocalPosition?.(canvas.stage);
-  if (!origin || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) {
-    console.log(`${MODULE_ID} | could not resolve world point`);
-    return;
-  }
+  const origin = event?.interactionData?.origin ?? event?.getLocalPosition?.(canvas.stage);
+  if (!origin || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) return;
   const point = { x: origin.x, y: origin.y };
-  console.log(`${MODULE_ID} | click at world`, point);
-
-  const targets = [];
-  for (const regionDoc of scene.regions) {
-    if (!regionHasClickMacroBehavior(regionDoc)) continue;
-    if (!regionContainsPoint(regionDoc, point)) continue;
-    targets.push(regionDoc);
-  }
-  console.log(`${MODULE_ID} | matching regions:`, targets.map(r => r.name));
-  if (!targets.length) return;
 
   const regionEvent = {
     name: CLICK_EVENT_NAME,
@@ -95,39 +44,16 @@ async function dispatchRegionClicks(event) {
     user: game.user
   };
 
-  for (const regionDoc of targets) {
-    try {
-      await regionDoc._handleEvent({ ...regionEvent, region: regionDoc });
-    } catch (err) {
-      console.error(`${MODULE_ID} | Error handling click on region ${regionDoc.name}`, err);
+  for (const regionDoc of scene.regions) {
+    if (!regionDoc.polygonTree?.testPoint(point)) continue;
+    for (const behavior of regionDoc.behaviors) {
+      if (behavior.type !== FULL_TYPE) continue;
+      if (behavior.disabled) continue;
+      try {
+        await behavior._handleRegionEvent({ ...regionEvent, region: regionDoc });
+      } catch (err) {
+        log.error(`error handling click on region "${regionDoc.name}"`, err);
+      }
     }
   }
-}
-
-function regionHasClickMacroBehavior(regionDoc) {
-  for (const behavior of regionDoc.behaviors) {
-    if (behavior.type === FULL_TYPE && !behavior.disabled) return true;
-  }
-  return false;
-}
-
-function regionContainsPoint(regionDoc, point) {
-  const placeable = regionDoc.object;
-  if (placeable && typeof placeable.testPoint === "function") {
-    try { return !!placeable.testPoint(point); } catch (_) {}
-  }
-  if (typeof regionDoc.testPoint === "function") {
-    try { return !!regionDoc.testPoint(point); } catch (_) {}
-    try { return !!regionDoc.testPoint({ x: point.x, y: point.y, elevation: 0 }); } catch (_) {}
-  }
-  if (placeable?.polygons?.length) {
-    for (const poly of placeable.polygons) {
-      if (poly.contains?.(point.x, point.y)) return true;
-    }
-    return false;
-  }
-  if (placeable?.shape?.contains) {
-    return !!placeable.shape.contains(point.x, point.y);
-  }
-  return false;
 }

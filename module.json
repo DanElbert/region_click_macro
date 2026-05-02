@@ -2,7 +2,7 @@
   "id": "region-click-macro",
   "title": "Region Click Macro",
   "description": "Adds an 'Execute Macro on Click' region behavior that runs a macro when a user left-clicks a region.",
-  "version": "1.0.4",
+  "version": "2.0.0",
   "compatibility": {
     "minimum": "14",
     "verified": "14"
@@ -23,15 +23,6 @@
       "path": "lang/en.json"
     }
   ],
-  "relationships": {
-    "requires": [
-      {
-        "id": "lib-wrapper",
-        "type": "module",
-        "compatibility": { "minimum": "1.12.0" }
-      }
-    ]
-  },
   "documentTypes": {
     "RegionBehavior": {
       "clickMacro": {}
